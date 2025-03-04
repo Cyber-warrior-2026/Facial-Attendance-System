@@ -4,7 +4,10 @@ import os
 import csv
 import time
 import pickle
-import pandas as pd  # Import pandas for CSV to Excel conversion
+import pandas as pd  # Convert CSV to Excel
+import smtplib  # Send emails
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from sklearn.neighbors import KNeighborsClassifier
 from datetime import datetime
 
@@ -15,8 +18,9 @@ facedetect = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 # Ensure required data files exist
 names_file = "data/names.pkl"
 faces_file = "data/face_data.pkl"
+emails_file = "data/emails.pkl"
 
-if not os.path.exists(names_file) or not os.path.exists(faces_file):
+if not os.path.exists(names_file) or not os.path.exists(faces_file) or not os.path.exists(emails_file):
     print("Error: Required data files not found! Please collect training data first.")
     exit()
 
@@ -26,6 +30,9 @@ with open(names_file, 'rb') as w:
 
 with open(faces_file, 'rb') as f:
     FACES = pickle.load(f)
+
+with open(emails_file, 'rb') as e:
+    EMAILS = pickle.load(e)  # Load email data
 
 # Train KNN classifier
 knn = KNeighborsClassifier(n_neighbors=5)
@@ -65,6 +72,34 @@ with open(attendance_csv, "r", newline="") as csvfile:
     for row in reader:
         marked_attendance.add(row[0])  # Store names already marked for the day
 
+
+# Function to send email notification
+def send_email(to_email, name, timestamp):
+    sender_email = "jsambhav335@gmail.com"  # Change this to your email
+    sender_password = "cszrchmxtptmtsbw"  # Generate app password from Google
+
+    subject = "Attendance Marked Successfully"
+    body = f"Hello {name},\n\nYour attendance has been marked successfully at {timestamp}.\n\nThank you!"
+
+    # Create email message
+    msg = MIMEMultipart()
+    msg["From"] = sender_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        # Connect to Gmail SMTP server
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()  # Secure connection
+        server.login(sender_email, sender_password)  # Login to sender email
+        server.sendmail(sender_email, to_email, msg.as_string())  # Send email
+        server.quit()
+        print(f"📧 Email sent successfully to {to_email}!")
+    except Exception as e:
+        print(f"❌ Failed to send email to {to_email}: {e}")
+
+
 while True:
     ret, frame = video.read()
     if not ret:
@@ -85,17 +120,28 @@ while True:
         timestamp = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
 
         # Draw rectangle around face and display name
-        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        cv2.rectangle(frame, (x, y-40), (x+w, y), (0, 255, 0), -1)
+        cv2.rectangle(frame, (x, y, x+w, y+h), (0, 255, 0), 2)
+        cv2.rectangle(frame, (x, y-40, x+w, y), (0, 255, 0), -1)
         cv2.putText(frame, output, (x+10, y-10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         # Mark attendance only if not already marked today
         if output not in marked_attendance:
             marked_attendance.add(output)
+
+            # Save attendance
             with open(attendance_csv, "a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow([output, timestamp])
+
             print(f"✅ Attendance recorded for: {output} at {timestamp}")
+
+            # Find email of the person
+            if output in LABELS:
+                index = LABELS.index(output)  # Find index of name
+                email = EMAILS[index]  # Get corresponding email
+
+                # Send email notification
+                send_email(email, output, timestamp)
 
     # Check if background image is large enough
     if imgbackground.shape[0] >= 642 and imgbackground.shape[1] >= 695:
