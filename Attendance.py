@@ -4,12 +4,16 @@ import os
 import csv
 import time
 import pickle
-import pandas as pd  # Convert CSV to Excel
-import smtplib  # Send emails
+import pandas as pd
+import smtplib
+import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from sklearn.neighbors import KNeighborsClassifier
 from datetime import datetime
+from geopy.distance import geodesic
 
 # Load webcam
 video = cv2.VideoCapture(0)
@@ -32,73 +36,103 @@ with open(faces_file, 'rb') as f:
     FACES = pickle.load(f)
 
 with open(emails_file, 'rb') as e:
-    EMAILS = pickle.load(e)  # Load email data
+    EMAILS = pickle.load(e)
 
 # Train KNN classifier
 knn = KNeighborsClassifier(n_neighbors=5)
 knn.fit(FACES, LABELS)
 
-# Load background image
-background_path = "background.webp"
-imgbackground = cv2.imread(background_path)
+# Ensure necessary folders exist
+os.makedirs("Attendance", exist_ok=True)
+os.makedirs("Unauthorized_Access", exist_ok=True)
 
-if imgbackground is None:
-    print("Error: Unable to load background image. Check the file path.")
-    exit()
+# Define authorized location (latitude, longitude)
+AUTHORIZED_LOCATION = (26.20085149761659, 78.1828866089955)  # Change to your actual location
+RADIUS_LIMIT = 0.5  # 500 meters radius
 
-# Ensure attendance folder exists
-if not os.path.exists("Attendance"):
-    os.makedirs("Attendance")
+# Email Configuration
+ADMIN_EMAIL = "jsambhav335@gmail.com"
+SENDER_EMAIL = "jsambhav335@gmail.com"
+SENDER_PASSWORD = "cszrchmxtptmtsbw"  # Use App Password for security
 
-# CSV file column headers
-COL_NAMES = ['NAME', 'TIME']
+# Function to get user's current location
+def get_current_location():
+    try:
+        response = requests.get("https://ipinfo.io/json")
+        data = response.json()
+        if "loc" in data:
+            lat, lon = map(float, data["loc"].split(","))
+            return (lat, lon)
+    except Exception as e:
+        print(f"⚠️ Error getting location: {e}")
+    return None
 
-# Get today's date
-date = datetime.now().strftime("%d-%m-%Y")
-attendance_csv = f"Attendance/Attendance_{date}.csv"
-attendance_excel = f"Attendance/Attendance_{date}.xlsx"  # Excel file path
+# Function to check if user is within the allowed location
+def is_within_location(user_location):
+    if user_location:
+        distance = geodesic(user_location, AUTHORIZED_LOCATION).km
+        print(f"📏 Distance to authorized location: {distance:.2f} km")
+        return distance <= RADIUS_LIMIT
+    return False
 
-# Create CSV file if it does not exist
-if not os.path.isfile(attendance_csv):
-    with open(attendance_csv, "w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(COL_NAMES)
-
-# Read existing attendance to prevent duplicate marking for the same day
-marked_attendance = set()
-with open(attendance_csv, "r", newline="") as csvfile:
-    reader = csv.reader(csvfile)
-    next(reader)  # Skip header row
-    for row in reader:
-        marked_attendance.add(row[0])  # Store names already marked for the day
-
-
-# Function to send email notification
-def send_email(to_email, name, timestamp):
-    sender_email = "jsambhav335@gmail.com"  # Change this to your email
-    sender_password = "cszrchmxtptmtsbw"  # Generate app password from Google
-
-    subject = "Attendance Marked Successfully"
-    body = f"Hello {name},\n\nYour attendance has been marked successfully at {timestamp}.\n\nThank you!"
-
-    # Create email message
+# Function to send email with an optional image attachment
+def send_email(to_email, subject, body, image_path=None):
     msg = MIMEMultipart()
-    msg["From"] = sender_email
+    msg["From"] = SENDER_EMAIL
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.attach(MIMEText(body, "plain"))
 
+    # Attach image if provided
+    if image_path and os.path.exists(image_path):
+        with open(image_path, "rb") as attachment:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(attachment.read())
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", f"attachment; filename={os.path.basename(image_path)}")
+            msg.attach(part)
+
     try:
-        # Connect to Gmail SMTP server
         server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()  # Secure connection
-        server.login(sender_email, sender_password)  # Login to sender email
-        server.sendmail(sender_email, to_email, msg.as_string())  # Send email
+        server.starttls()
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
         server.quit()
         print(f"📧 Email sent successfully to {to_email}!")
     except Exception as e:
-        print(f"❌ Failed to send email to {to_email}: {e}")
+        print(f"❌ Failed to send email: {e}")
 
+# Check user's location before allowing attendance
+user_location = get_current_location()
+if user_location:
+    print(f"🌍 Your detected location: {user_location}")
+
+if not is_within_location(user_location):
+    print("🚨 Access Denied: You are outside the authorized location!")
+
+    # Send alert to admin
+    send_email(ADMIN_EMAIL, "🚨 Unauthorized Location Access Attempt!",
+               f"An access attempt was made from outside the authorized location at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
+    
+    exit()
+
+# Attendance tracking
+date = datetime.now().strftime("%d-%m-%Y")
+attendance_csv = f"Attendance/Attendance_{date}.csv"
+
+# Create CSV file if not exists
+if not os.path.isfile(attendance_csv):
+    with open(attendance_csv, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['NAME', 'TIME'])
+
+# Read existing attendance
+marked_attendance = set()
+with open(attendance_csv, "r", newline="") as csvfile:
+    reader = csv.reader(csvfile)
+    next(reader)
+    for row in reader:
+        marked_attendance.add(row[0])
 
 while True:
     ret, frame = video.read()
@@ -116,15 +150,36 @@ while True:
         # Predict name
         output = knn.predict(resize_img)[0]
 
-        ts = time.time()
-        timestamp = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
         # Draw rectangle around face and display name
         cv2.rectangle(frame, (x, y, x+w, y+h), (0, 255, 0), 2)
         cv2.rectangle(frame, (x, y-40, x+w, y), (0, 255, 0), -1)
         cv2.putText(frame, output, (x+10, y-10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-        # Mark attendance only if not already marked today
+        if output not in LABELS:
+            print(f"🚨 Unauthorized Access Attempt Detected!")
+
+            # Save image of unauthorized person
+            unknown_img_path = f"Unauthorized_Access/Intruder_{timestamp}.jpg"
+            cv2.imwrite(unknown_img_path, crop_img)
+
+            # Ensure the image is saved before sending
+            time.sleep(2)  # Give time for the file to be written
+            if os.path.exists(unknown_img_path):
+                print(f"📷 Intruder image saved at {unknown_img_path}")
+
+                # Send alert email with the intruder's image
+                send_email(ADMIN_EMAIL, "🚨 Unauthorized Access Alert!",
+                           f"An unauthorized person tried to access the system at {timestamp}. Please check the attached image.",
+                           unknown_img_path)
+                print("📧 Intruder image email sent to admin.")
+            else:
+                print("❌ Error: Intruder image not saved, email not sent.")
+
+            continue  # Skip further processing for unknown person
+
+        # Mark attendance if user is recognized
         if output not in marked_attendance:
             marked_attendance.add(output)
 
@@ -135,34 +190,16 @@ while True:
 
             print(f"✅ Attendance recorded for: {output} at {timestamp}")
 
-            # Find email of the person
-            if output in LABELS:
-                index = LABELS.index(output)  # Find index of name
-                email = EMAILS[index]  # Get corresponding email
+            index = LABELS.index(output)
+            email = EMAILS[index]
+            send_email(email, "Attendance Marked Successfully",
+                       f"Hello {output},\n\nYour attendance has been marked at {timestamp}.")
 
-                # Send email notification
-                send_email(email, output, timestamp)
-
-    # Check if background image is large enough
-    if imgbackground.shape[0] >= 642 and imgbackground.shape[1] >= 695:
-        imgbackground[162:162+480, 55:55+640] = frame
-    else:
-        print("Error: Background image is too small to fit the video frame.")
-        break
-
-    cv2.imshow("Face Recognition Attendance", imgbackground)
+    cv2.imshow("Face Recognition Attendance", frame)
     
     k = cv2.waitKey(1)
-    if k == ord('q'):  # Exit program
+    if k == ord('q'):
         break
-
-# Convert CSV to Excel when the program exits
-try:
-    df = pd.read_csv(attendance_csv)  # Read CSV file
-    df.to_excel(attendance_excel, index=False)  # Convert to Excel
-    print(f"📂 Attendance saved as Excel file: {attendance_excel}")
-except Exception as e:
-    print(f"❌ Error converting CSV to Excel: {e}")
 
 video.release()
 cv2.destroyAllWindows()
