@@ -32,7 +32,7 @@ knn = KNeighborsClassifier(n_neighbors=5)
 knn.fit(FACES, LABELS)
 
 # Load background image
-background_path = "C:/Users/hp/Documents/semester 5/Minor 2/Attendance system/background.webp"
+background_path = "background.webp"
 imgbackground = cv2.imread(background_path)
 
 if imgbackground is None:
