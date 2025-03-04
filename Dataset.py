@@ -12,7 +12,9 @@ facedetect = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
 face_data = []  # List to store face images
 i = 0
 
-name = input("Enter your name: ")  # Taking user input
+# Taking user input for name and email
+name = input("Enter your name: ")
+email = input("Enter your email: ")
 
 # Webcam loop for face detection and saving data
 while True:
@@ -64,6 +66,19 @@ else:
     with open(names_file, "wb") as f:
         pickle.dump(names, f)
 
+# Save Emails Data (New column)
+emails_file = "data/emails.pkl"
+if not os.path.exists(emails_file):
+    emails = [email] * 50  # Store email 50 times
+    with open(emails_file, "wb") as f:
+        pickle.dump(emails, f)
+else:
+    with open(emails_file, "rb") as f:
+        emails = pickle.load(f)
+    emails += [email] * 50  # Append new email data
+    with open(emails_file, "wb") as f:
+        pickle.dump(emails, f)
+
 # Save Face Data
 face_data_file = "data/face_data.pkl"
 if not os.path.exists(face_data_file):
@@ -76,5 +91,4 @@ else:
     with open(face_data_file, "wb") as f:
         pickle.dump(faces, f)
 
-print("Face data saved successfully!")
-
+print("Face data, names, and emails saved successfully!")
