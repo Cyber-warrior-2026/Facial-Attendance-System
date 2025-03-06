@@ -1,3 +1,4 @@
+ 
 import cv2
 import numpy as np
 import os
@@ -47,7 +48,7 @@ os.makedirs("Attendance", exist_ok=True)
 os.makedirs("Unauthorized_Access", exist_ok=True)
 
 # Define authorized location (latitude, longitude)
-AUTHORIZED_LOCATION = (26.20085149761659, 78.1828866089955)  # Change to your actual location
+AUTHORIZED_LOCATION = (22.7179, 75.8333)  # Change to your actual location
 RADIUS_LIMIT = 0.5  # 500 meters radius
 
 # Email Configuration
@@ -149,6 +150,7 @@ while True:
 
         # Predict name
         output = knn.predict(resize_img)[0]
+        
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -157,27 +159,27 @@ while True:
         cv2.rectangle(frame, (x, y-40, x+w, y), (0, 255, 0), -1)
         cv2.putText(frame, output, (x+10, y-10), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-        if output not in LABELS:
-            print(f"🚨 Unauthorized Access Attempt Detected!")
+        # if output not in LABELS:
+        #     print(f"🚨 Unauthorized Access Attempt Detected!")
 
-            # Save image of unauthorized person
-            unknown_img_path = f"Unauthorized_Access/Intruder_{timestamp}.jpg"
-            cv2.imwrite(unknown_img_path, crop_img)
+        #     # Save image of unauthorized person
+        #     unknown_img_path = f"Unauthorized_Access/Intruder_{timestamp}.jpg"
+        #     cv2.imwrite(unknown_img_path, crop_img)
 
-            # Ensure the image is saved before sending
-            time.sleep(2)  # Give time for the file to be written
-            if os.path.exists(unknown_img_path):
-                print(f"📷 Intruder image saved at {unknown_img_path}")
+        #     # Ensure the image is saved before sending
+        #     time.sleep(2)  # Give time for the file to be written
+        #     if os.path.exists(unknown_img_path):
+        #         print(f"📷 Intruder image saved at {unknown_img_path}")
 
-                # Send alert email with the intruder's image
-                send_email(ADMIN_EMAIL, "🚨 Unauthorized Access Alert!",
-                           f"An unauthorized person tried to access the system at {timestamp}. Please check the attached image.",
-                           unknown_img_path)
-                print("📧 Intruder image email sent to admin.")
-            else:
-                print("❌ Error: Intruder image not saved, email not sent.")
+        #         # Send alert email with the intruder's image
+        #         send_email(ADMIN_EMAIL, "🚨 Unauthorized Access Alert!",
+        #                    f"An unauthorized person tried to access the system at {timestamp}. Please check the attached image.",
+        #                    unknown_img_path)
+        #         print("📧 Intruder image email sent to admin.")
+        #     else:
+        #         print("❌ Error: Intruder image not saved, email not sent.")
 
-            continue  # Skip further processing for unknown person
+        #     continue  # Skip further processing for unknown person
 
         # Mark attendance if user is recognized
         if output not in marked_attendance:
@@ -200,6 +202,16 @@ while True:
     k = cv2.waitKey(1)
     if k == ord('q'):
         break
+    # Convert CSV to Excel when the program exits
+    attendance_excel = f"Attendance/Attendance_{date}.xlsx"
+try:
+    df = pd.read_csv(attendance_csv)  # Read CSV file
+    df.to_excel(attendance_excel, index=False)  # Convert to Excel
+    print(f"📂 Attendance saved as Excel file: {attendance_excel}")
+except Exception as e:
+    print(f"❌ Error converting CSV to Excel: {e}")
+
+
 
 video.release()
 cv2.destroyAllWindows()
