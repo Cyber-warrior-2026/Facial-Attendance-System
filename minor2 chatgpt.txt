@@ -1,2 +1,0 @@
-https://chatgpt.com/share/67c485a8-7e50-800e-a37d-7d705a24a71b
-https://github.com/kipr/opencv/blob/master/data/haarcascades/haarcascade_frontalface_default.xml
