@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Attendance System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Facial Attendance System</a>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Today's Attendance</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table" id="attendanceTable">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">System Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <h6>Cameras</h6>
+                            <div id="cameraStatus"></div>
+                        </div>
+                        <div class="mb-3">
+                            <h6>Face Recognition</h6>
+                            <div id="recognitionStatus"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Unauthorized Access Attempts</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table" id="unauthorizedTable">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Image</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Function to update attendance table
+        function updateAttendance() {
+            fetch('/api/attendance')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector('#attendanceTable tbody');
+                    tbody.innerHTML = '';
+                    data.forEach(entry => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${entry.name}</td>
+                            <td>${entry.timestamp}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                });
+        }
+
+        // Function to update unauthorized access table
+        function updateUnauthorized() {
+            fetch('/api/unauthorized')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector('#unauthorizedTable tbody');
+                    tbody.innerHTML = '';
+                    data.forEach(entry => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${entry.timestamp}</td>
+                            <td><img src="${entry.image_path}" alt="Unauthorized access" style="max-width: 100px;"></td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                });
+        }
+
+        // Update tables every 5 seconds
+        setInterval(() => {
+            updateAttendance();
+            updateUnauthorized();
+        }, 5000);
+
+        // Initial update
+        updateAttendance();
+        updateUnauthorized();
+    </script>
+</body>
+
+</html>

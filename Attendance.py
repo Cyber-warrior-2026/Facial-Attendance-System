@@ -72,7 +72,7 @@ def send_email(to_email, subject, body, image_path=None):
         server.login(SENDER_EMAIL, SENDER_PASSWORD)
         server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
         server.quit()
-        print(f"📧 Email sent successfully to {to_email}!")
+        print(f"  Email sent successfully to {to_email}!")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
 
@@ -126,7 +126,7 @@ while True:
                 writer = csv.writer(csvfile)
                 writer.writerow([output, timestamp])
 
-            print(f"✅ Attendance recorded for: {output} at {timestamp}")
+            print(f" Attendance recorded for: {output} at {timestamp}")
 
             index = LABELS.index(output)
             email = EMAILS[index]
@@ -144,9 +144,9 @@ attendance_excel = f"Attendance/Attendance_{date}.xlsx"
 try:
     df = pd.read_csv(attendance_csv)  # Read CSV file
     df.to_excel(attendance_excel, index=False)  # Convert to Excel
-    print(f"📂 Attendance saved as Excel file: {attendance_excel}")
+    print(f" Attendance saved as Excel file: {attendance_excel}")
 except Exception as e:
-    print(f"❌ Error converting CSV to Excel: {e}")
+    print(f"Error converting CSV to Excel: {e}")
 
 video.release()
 cv2.destroyAllWindows()
