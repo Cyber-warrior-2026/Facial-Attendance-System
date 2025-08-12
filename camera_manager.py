@@ -2,7 +2,8 @@ import cv2
 import threading
 import queue
 import time
-from config import CAMERA_IDS, CAMERA_RESOLUTION, FRAME_RATE
+import numpy as np
+from config import CAMERAS
 
 class CameraManager:
     def __init__(self):
@@ -10,12 +11,21 @@ class CameraManager:
         self.frame_queues = {}
         self.running = False
         self.threads = []
+        self._initialize_cameras()
+
+    def _initialize_cameras(self):
+        """Initialize all cameras"""
+        for camera_id in CAMERAS["ids"]:
+            self._start_camera(camera_id)
 
     def start(self):
         """Start all camera feeds"""
         self.running = True
-        for camera_id in CAMERA_IDS:
-            self._start_camera(camera_id)
+        for camera_id in CAMERAS["ids"]:
+            thread = threading.Thread(target=self._camera_thread, args=(camera_id,))
+            thread.daemon = True
+            thread.start()
+            self.threads.append(thread)
 
     def stop(self):
         """Stop all camera feeds"""
@@ -28,21 +38,18 @@ class CameraManager:
     def _start_camera(self, camera_id):
         """Start a single camera feed"""
         camera = cv2.VideoCapture(camera_id)
-        camera.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_RESOLUTION[0])
-        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_RESOLUTION[1])
-        camera.set(cv2.CAP_PROP_FPS, FRAME_RATE)
-
+        
+        # Set camera properties
+        camera.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERAS["resolution"][0])
+        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERAS["resolution"][1])
+        camera.set(cv2.CAP_PROP_FPS, CAMERAS["fps"])
+        
         if not camera.isOpened():
             print(f"Error: Could not open camera {camera_id}")
             return
 
         self.cameras[camera_id] = camera
         self.frame_queues[camera_id] = queue.Queue(maxsize=2)
-        
-        thread = threading.Thread(target=self._camera_thread, args=(camera_id,))
-        thread.daemon = True
-        thread.start()
-        self.threads.append(thread)
 
     def _camera_thread(self, camera_id):
         """Thread function for capturing frames from a camera"""
@@ -53,8 +60,19 @@ class CameraManager:
                 time.sleep(1)
                 continue
 
+            # Rotate frame if needed
+            if CAMERAS["rotation"] != 0:
+                frame = self._rotate_frame(frame, CAMERAS["rotation"])
+
             if not self.frame_queues[camera_id].full():
                 self.frame_queues[camera_id].put(frame)
+
+    def _rotate_frame(self, frame, angle):
+        """Rotate frame by specified angle"""
+        height, width = frame.shape[:2]
+        center = (width/2, height/2)
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        return cv2.warpAffine(frame, rotation_matrix, (width, height))
 
     def get_frame(self, camera_id):
         """Get the latest frame from a specific camera"""
@@ -73,4 +91,18 @@ class CameraManager:
             frame = self.get_frame(camera_id)
             if frame is not None:
                 frames[camera_id] = frame
-        return frames 
+        return frames
+
+    def get_camera_status(self):
+        """Get status of all cameras"""
+        status = {}
+        for camera_id in self.cameras:
+            status[camera_id] = {
+                "connected": self.cameras[camera_id].isOpened(),
+                "fps": self.cameras[camera_id].get(cv2.CAP_PROP_FPS),
+                "resolution": (
+                    int(self.cameras[camera_id].get(cv2.CAP_PROP_FRAME_WIDTH)),
+                    int(self.cameras[camera_id].get(cv2.CAP_PROP_FRAME_HEIGHT))
+                )
+            }
+        return status 
